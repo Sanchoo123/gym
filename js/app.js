@@ -2,6 +2,7 @@ import { store, save, uid, replaceAll, resetAll } from './store.js';
 import { loadExercises, getEx, img, muscleName, MUSCLES, EQUIPMENT, MY_SPLIT } from './data.js';
 import { suggest, history, bests, e1rm, volume, setCount, progressSeries, insights, askClaude, estimateMeal, claudeErrorMessage } from './coach.js';
 import { REGIONS, RECOMMEND, regionsFor, regionSets, regionStrength, volumeState, strengthState, aestheticScore, bodySvg, miniBody } from './body.js';
+import { phase, newMeso, rollover, plannedSets, sessionRegions, pendingRecovery, afterWorkout, lastEntry, PUMP, REC, ACC_WEEKS } from './meso.js';
 import { plan, weightTrend, weightAdvice, adonis, ACTIVITY, GOALS, dayTotals, targets, PRESETS, shrinkImage } from './nutrition.js';
 import { esc, fmt, icon, sheet, toast, confetti, haptic, unlockAudio, beep, lineChart, countUp } from './ui.js';
 
@@ -119,7 +120,7 @@ function renderHome() {
     hero = `<button class="hero" data-act="open-workout"><div><span class="hero-eyebrow">EM CURSO</span><b>${esc(active.name)}</b><span class="num" data-elapsed>${clock(Date.now() - active.start)}</span></div><div class="arrow">${icon.arrow}</div></button>`;
   } else if (next) {
     const regs = routineRegions(next);
-    const sets = next.exercises.reduce((t, e) => t + e.sets, 0);
+    const sets = next.exercises.reduce((t, e) => t + plannedSets(S().meso, e.exId, e.sets), 0);
     hero = `<div class="next-card">
       <div class="next-info">
         <span class="hero-eyebrow">PRÓXIMO TREINO</span>
@@ -141,6 +142,7 @@ function renderHome() {
     </div>
     <div class="week-strip">${days.map((d, i) => `<div class="day ${trained.has(i) ? 'on' : ''} ${i === today ? 'today' : ''}"><span>${d}</span><i></i></div>`).join('')}</div>
     ${hero}
+    ${mesoCard()}
     ${nutritionCard()}
     <div class="stats">
       <div class="stat"><b class="num" data-count="${week.length}">0</b><span>treinos na semana</span></div>
@@ -173,10 +175,58 @@ function workoutCard(w) {
   </div>`;
 }
 
+// ============ Mesociclo ============
+const deltaChip = (d) => `<span class="delta ${d > 0 ? 'up' : d < 0 ? 'dn' : ''}">${d > 0 ? '+1 série' : d < 0 ? '−1 série' : 'manter'}</span>`;
+
+function mesoCard() {
+  const m = S().meso, p = phase(m);
+  if (!p) {
+    return `<button class="card tap meso-card" data-act="meso-start"><div class="grow"><span class="hero-eyebrow">MESOCICLO</span><b>Ativar progressão automática</b>
+      <div class="muted small">Blocos de 4 semanas + deload. As séries de cada músculo ajustam-se ao teu pump e recuperação.</div></div><span class="muted">›</span></button>`;
+  }
+  const weeks = Array.from({ length: ACC_WEEKS + 1 }, (_, i) => `<i class="${i + 1 < p.week ? 'past' : i + 1 === p.week ? 'on' : ''} ${i === ACC_WEEKS ? 'dl' : ''}"></i>`).join('');
+  return `<button class="card tap meso-card" data-act="meso"><div class="grow">
+    <div class="row between"><b>Bloco ${m.n} · ${p.deload ? 'Deload' : `Semana ${p.week} de ${ACC_WEEKS}`}</b><span class="muted">›</span></div>
+    <div class="meso-weeks">${weeks}</div>
+    <div class="muted small">${p.deload ? 'Metade das séries, mesma carga, longe da falha. É aqui que o músculo recupera e cresce.' : `Em cada série deixa ${p.rir} no depósito (RPE ${p.rpe}).`}</div>
+  </div></button>`;
+}
+
+function mesoSheet() {
+  const s = S(), m = s.meso, p = phase(m);
+  if (!p) return;
+  const changed = s.routines.flatMap((rt) => rt.exercises.filter((e) => m.extra[e.exId]).map((e) => ({ e, n: m.extra[e.exId] })));
+  const total = changed.reduce((t, c) => t + c.n, 0);
+  const recent = m.log.filter((e) => e.delta != null).slice(-8).reverse();
+  const sh = sheet(`
+    <div class="head"><h3>Bloco ${m.n}</h3><button class="icon-btn" data-close>${icon.close}</button></div>
+    <div class="body">
+      <div class="kv"><div><b>${p.deload ? 'Deload' : `${p.week}/${ACC_WEEKS}`}</b><span>semana</span></div><div><b>${p.deload ? '4+' : p.rir.split(' ')[0]}</b><span>reps no depósito</span></div><div><b class="num">${total > 0 ? '+' : ''}${total}</b><span>séries por rotação</span></div></div>
+      <h2>Volume ajustado</h2>
+      ${changed.length ? `<div class="card">${changed.map(({ e, n }) => `<div class="list-item"><span class="ellipsis">${esc(getEx(e.exId).name)}</span><b class="num" style="white-space:nowrap">${e.sets} → ${e.sets + n} séries</b></div>`).join('')}</div>`
+        : `<p class="muted small">Ainda sem ajustes. No fim de cada treino diz o pump de cada músculo e no treino seguinte desses músculos diz como recuperaste. A app sobe ou desce as séries com base nisso.</p>`}
+      ${recent.length ? `<h2>Últimas decisões</h2><div class="card">${recent.map((e) => `<div class="list-item"><span><b>${esc(REGIONS[e.r].name)}</b><br><span class="muted small">${esc(e.why || '')}</span></span>${deltaChip(e.delta)}</div>`).join('')}</div>` : ''}
+      <h2>Como funciona</h2>
+      <ul class="tips">
+        <li>Semanas 1 a 4: o esforço sobe de 3 para 0–1 reps antes da falha.</li>
+        <li>Recuperaste e a força aguentou → <b>+1 série</b>. Ainda um pouco dorido → <b>mantém</b>. Muito dorido ou a perder força → <b>−1 série</b>.</li>
+        <li>Músculos estéticos podem subir até +3 séries; os outros até +1. Máximo de ${10} séries por músculo no mesmo treino.</li>
+        <li>2 ou mais músculos a pedir menos volume na mesma semana → deload antecipado.</li>
+        <li>Semana 5 é deload. O bloco seguinte começa a meio caminho do teu pico.</li>
+      </ul>
+      ${p.deload ? '' : `<button class="btn block" style="margin-top:14px" data-act="meso-deload">Fazer deload já</button>`}
+      <button class="btn ghost block" style="margin-top:8px;color:var(--danger)" data-act="meso-off">Desligar mesociclo</button>
+    </div>`);
+  sh.el.addEventListener('click', (e) => { if (e.target.closest('[data-act=meso-deload],[data-act=meso-off]')) sh.close(); });
+}
+
 // ============ Corpo ============
 function bodyData() {
   const { workouts } = S();
-  const sets = regionSets(workouts, Date.now() - 7 * DAY);
+  // Média semanal das últimas 2 semanas: com a rotação de 3 dias há semanas com 2 e com 3 sessões
+  const days = Math.min(14, Math.max(7, (Date.now() - (workouts[0]?.start ?? Date.now())) / DAY));
+  const raw = regionSets(workouts, Date.now() - days * DAY);
+  const sets = Object.fromEntries(Object.entries(raw).map(([r, v]) => [r, (v * 7) / days]));
   const strength = regionStrength(workouts);
   return { sets, strength };
 }
@@ -209,7 +259,7 @@ function renderBody() {
       <button class="icon-btn" data-act="profile" aria-label="Perfil">${icon.user}</button></div>
     <div class="segmented" style="--i:${bodyMode === 'volume' ? 0 : 1}">
       <span class="seg-pill"></span>
-      <button class="${bodyMode === 'volume' ? 'on' : ''}" data-act="body-mode" data-mode="volume">Volume · 7 dias</button>
+      <button class="${bodyMode === 'volume' ? 'on' : ''}" data-act="body-mode" data-mode="volume">Volume · semana</button>
       <button class="${bodyMode === 'strength' ? 'on' : ''}" data-act="body-mode" data-mode="strength">Força · 6 semanas</button>
     </div>
     <div class="card body-card">
@@ -290,7 +340,7 @@ function regionSheet(r) {
   sheet(`
     <div class="head"><div><h3>${esc(cfg.name)}</h3>${cfg.aesthetic ? '<span class="aes">✦ prioridade estética</span>' : ''}</div><button class="icon-btn" data-close>${icon.close}</button></div>
     <div class="body">
-      <div class="kv"><div><b class="num">${half(s)}</b><span>séries (7 dias)</span></div><div><b class="num">${cfg.min}–${cfg.max}</b><span>ideal/semana</span></div><div><b class="num" style="color:${tr == null ? 'inherit' : tr >= 1.5 ? 'var(--accent)' : tr < -1 ? 'var(--danger)' : 'var(--warn)'}">${tr == null ? '–' : `${tr > 0 ? '+' : ''}${dec(Math.round(tr * 10) / 10)}%`}</b><span>força 6 sem.</span></div></div>
+      <div class="kv"><div><b class="num">${half(s)}</b><span>séries/semana</span></div><div><b class="num">${cfg.min}–${cfg.max}</b><span>ideal/semana</span></div><div><b class="num" style="color:${tr == null ? 'inherit' : tr >= 1.5 ? 'var(--accent)' : tr < -1 ? 'var(--danger)' : 'var(--warn)'}">${tr == null ? '–' : `${tr > 0 ? '+' : ''}${dec(Math.round(tr * 10) / 10)}%`}</b><span>força 6 sem.</span></div></div>
       <div class="vol-track"><i class="${st}" style="width:${Math.min(100, (s / (cfg.max * 1.2)) * 100)}%"></i><span style="left:${(cfg.min / (cfg.max * 1.2)) * 100}%"></span><span style="left:${(cfg.max / (cfg.max * 1.2)) * 100}%"></span></div>
       <div class="advice ${st === 'good' ? 'good' : st === 'high' ? 'info' : 'warn'}"><span>${esc(msg)}</span></div>
       ${tr != null && tr < 0 ? `<div class="advice warn"><span>A força está a descer. Verifica sono, calorias (estás em superávit?) e considera uma semana de deload.</span></div>` : ''}
@@ -684,7 +734,9 @@ function aiContext() {
   if (weights.length) lines.push(`Peso: ${weights.at(-1).kg} kg${tr ? `, tendência ${Math.round(tr.rate * 100) / 100} kg/semana` : ''}.`);
   if (p) lines.push(`Plano calculado: ${p.kcal} kcal, ${p.protein} g proteína, ${p.carbs} g hidratos, ${p.fat} g gordura.`);
   if (measures.length) { const m = measures.at(-1); lines.push(`Medidas (cm): ombros ${m.shoulders}, peito ${m.chest}, cintura ${m.waist}, braço ${m.arm}, coxa ${m.thigh}.`); }
-  lines.push(`Séries por músculo nos últimos 7 dias: ${Object.entries(REGIONS).map(([r, c]) => `${c.name} ${Math.round((sets[r] || 0) * 10) / 10} (ideal ${c.min}-${c.max})`).join('; ')}.`);
+  const m = S().meso, mp = phase(m);
+  if (mp) lines.push(`Mesociclo: bloco ${m.n}, ${mp.deload ? 'semana de deload' : `semana ${mp.week} de ${ACC_WEEKS} (alvo ${mp.rir} antes da falha, RPE ${mp.rpe})`}. Séries extra ajustadas pelo feedback: ${Object.entries(m.extra).filter(([, n]) => n).map(([id, n]) => `${getEx(id).name} ${n > 0 ? '+' : ''}${n}`).join(', ') || 'nenhuma ainda'}.`);
+  lines.push(`Séries por músculo por semana (média das últimas 2 semanas): ${Object.entries(REGIONS).map(([r, c]) => `${c.name} ${Math.round((sets[r] || 0) * 10) / 10} (ideal ${c.min}-${c.max})`).join('; ')}.`);
   const { meals } = S();
   const tg = targets(p, weights.at(-1)?.kg);
   const today = dayTotals(meals);
@@ -747,6 +799,34 @@ async function sendChat(text) {
 }
 
 // ============ Treino ativo ============
+// Sugestão do coach; no deload mantém a carga em vez de subir
+function sugFor(exId) {
+  const { workouts, settings, active, meso } = S();
+  const sg = suggest(workouts, exId, settings.increment);
+  if (!sg || !phase(meso, active?.start ?? Date.now())?.deload) return sg;
+  const last = history(workouts, exId).find((h) => !h.deload);
+  const W = Math.max(...last.sets.map((s) => s.w));
+  const r = Math.min(...last.sets.filter((s) => s.w === W).map((s) => s.r));
+  return { w: W, r, kind: 'deload', why: 'Deload: mesma carga, metade das séries, longe da falha.' };
+}
+
+function mesoBanner(a) {
+  const m = S().meso, p = phase(m, a.start);
+  if (!p) return '';
+  const pend = p.deload ? [] : pendingRecovery(m, sessionRegions(a.exercises), a.start, a.id);
+  const open = pend.filter((e) => e.rec == null).length;
+  return `<button class="meso-banner ${p.deload ? 'dl' : ''}" data-act="meso"><span class="badge">BLOCO ${m.n}</span><span class="grow">${p.deload ? '<b>Deload</b> · metade das séries, mesma carga' : `<b>Semana ${p.week}</b> · deixa ${p.rir} no depósito (RPE ${p.rpe})`}</span></button>
+    ${pend.length ? `<div class="card checkin ${open ? '' : 'done'}"><b>${open ? 'Check-in de recuperação' : 'Check-in feito ✓'}</b>
+      ${open ? '<p class="muted small" style="margin:4px 0 0">Desde o último treino destes músculos, como recuperaram?</p>' : ''}
+      ${pend.map((e) => `<div class="fb-row"><span>${esc(REGIONS[e.r].name)}</span><div class="chips wrap">${REC.map((l, i) => `<button class="chip ${e.rec === i ? 'on' : ''}" data-act="meso-rec" data-r="${e.r}" data-v="${i}">${l}</button>`).join('')}</div></div>`).join('')}
+    </div>` : ''}`;
+}
+
+function mesoFinish(res, wid) {
+  return `${res.deloadNow ? `<div class="advice warn"><b>Fadiga acumulada</b><span>Vários músculos pediram menos volume esta semana. Os próximos 7 dias são de deload para recuperares e voltares mais forte.</span></div>` : ''}
+    ${res.changes.length ? `<h2>Ajustes para a próxima vez</h2><div class="card">${res.changes.map((c) => `<div class="list-item"><span><b>${esc(REGIONS[c.r].name)}</b>${c.exId ? `<span class="muted small"> · ${esc(getEx(c.exId).name)}</span>` : ''}<br><span class="muted small">${esc(c.why || '')}</span></span>${deltaChip(c.d)}</div>`).join('')}</div>` : ''}
+    ${res.regions.length ? `<h2>Que pump sentiste?</h2><div class="card">${res.regions.map((r) => `<div class="fb-row"><span>${esc(REGIONS[r].name)}</span><div class="chips wrap" style="--n:3">${PUMP.map((l, i) => `<button class="chip" data-act="meso-pump" data-wid="${wid}" data-r="${r}" data-v="${i}">${l}</button>`).join('')}</div></div>`).join('')}</div>` : ''}`;
+}
 function newEntry(exId, n) {
   const last = history(S().workouts, exId)[0];
   const count = n || last?.sets.length || 3;
@@ -757,7 +837,9 @@ function startWorkout(routine, fromWorkout) {
   const s = S();
   if (s.active) return openWorkout();
   const day = new Date().toLocaleDateString('pt-PT', { weekday: 'long' });
-  const src = routine?.exercises || fromWorkout?.exercises.map((e) => ({ exId: e.exId, sets: e.sets.length }));
+  if (s.meso) s.meso = rollover(s.meso);
+  const src = routine?.exercises.map((e) => ({ exId: e.exId, sets: plannedSets(s.meso, e.exId, e.sets) }))
+    || fromWorkout?.exercises.map((e) => ({ exId: e.exId, sets: e.sets.length }));
   s.active = {
     id: uid(), start: Date.now(), routineId: routine?.id || fromWorkout?.routineId || null,
     name: routine?.name || fromWorkout?.name || `Treino de ${day}`,
@@ -813,6 +895,7 @@ function renderWorkout() {
     </div>
     <div class="w-progress"><i style="width:${total ? (doneN / total) * 100 : 0}%"></i></div>
     <div class="content">
+      ${mesoBanner(a)}
       ${a.exercises.map(exerciseCard).join('')}
       ${!a.exercises.length ? `<div class="empty"><div class="big">➕</div>Adiciona o primeiro exercício</div>` : ''}
       <button class="btn block" style="margin-top:18px;color:var(--accent)" data-act="add-ex">${icon.plus} Adicionar exercício</button>
@@ -825,7 +908,10 @@ function exerciseCard(entry, ei) {
   const { workouts, settings } = S();
   const ex = getEx(entry.exId);
   const prev = history(workouts, entry.exId)[0];
-  const sg = suggest(workouts, entry.exId, settings.increment);
+  const sg = sugFor(entry.exId);
+  const ex0 = S().meso?.extra[entry.exId] || 0;
+  const mp = phase(S().meso, S().active?.start);
+  const mtag = mp?.deload ? '<span class="meso-tag dl">deload</span>' : mp && ex0 ? `<span class="meso-tag ${ex0 < 0 ? 'dn' : ''}">${ex0 > 0 ? '+' : '−'}${Math.abs(ex0)} série${Math.abs(ex0) > 1 ? 's' : ''}</span>` : '';
   const allDone = entry.sets.length && entry.sets.every((s) => s.done);
   const ph = (i, k) => {
     if (sg && k === 'w') return dec(sg.w);
@@ -836,7 +922,7 @@ function exerciseCard(entry, ei) {
   return `<div class="card ex-card ${allDone ? 'complete' : ''}" data-ei="${ei}">
     <div class="ex-top">
       <button data-act="ex-detail" data-id="${ex.id}">${thumb(ex.id)}</button>
-      <div class="grow"><button class="ex-name" data-act="ex-detail" data-id="${ex.id}">${esc(ex.name)}</button><div class="muted small">${esc(ex.primary.map(muscleName).join(', '))}</div></div>
+      <div class="grow"><button class="ex-name" data-act="ex-detail" data-id="${ex.id}">${esc(ex.name)}</button><div class="muted small">${esc(ex.primary.map(muscleName).join(', '))}${mtag}</div></div>
       <button class="icon-btn" data-act="ex-menu" data-ei="${ei}" aria-label="Opções">${icon.dots}</button>
     </div>
     ${sg ? `<button class="suggest ${sg.kind === 'deload' ? 'deload' : ''}" data-act="apply-suggest" data-ei="${ei}"><span class="badge">COACH</span><span class="grow">${esc(sg.why)}</span><b class="num">${dec(sg.w)}×${sg.r}</b></button>` : ''}
@@ -909,9 +995,9 @@ function tick(ei, si) {
 }
 
 function applySuggest(ei) {
-  const { workouts, settings, active } = S();
+  const { active } = S();
   const entry = active.exercises[ei];
-  const sg = suggest(workouts, entry.exId, settings.increment);
+  const sg = sugFor(entry.exId);
   if (!sg) return;
   entry.sets.forEach((s) => { if (!s.done) { s.w = sg.w; s.r = sg.r; } });
   save(); haptic(); renderWorkout();
@@ -929,8 +1015,11 @@ function finishWorkout() {
     return;
   }
   const w = { id: a.id, name: a.name.trim() || 'Treino', routineId: a.routineId || null, start: a.start, end: Date.now(), exercises };
+  const mp = phase(s.meso, a.start);
+  if (mp?.deload) w.deload = true;
   s.workouts.push(w);
   s.active = null;
+  const meso = mp ? afterWorkout(s.meso, s.workouts, s.routines, w) : null;
   save();
   stopRest();
   closeWorkout();
@@ -944,6 +1033,7 @@ function finishWorkout() {
       <div class="done-body">${miniBody(regs)}</div>
       <div class="kv"><div><b>${duration(w.end - w.start)}</b><span>duração</span></div><div><b>${tons(volume(w))}</b><span>volume</span></div><div><b>${setCount(w)}</b><span>séries</span></div></div>
       ${prs.length ? `<div class="card" style="border-color:rgba(255,212,59,.35)"><b style="color:var(--gold)">🏆 ${prs.length} recorde${prs.length > 1 ? 's' : ''} pessoal${prs.length > 1 ? 'is' : ''}</b>${prs.map((p) => `<div class="list-item"><span>${esc(getEx(p.exId).name)}</span><b class="num">${dec(p.w)} × ${p.r}</b></div>`).join('')}</div>` : ''}
+      ${meso ? mesoFinish(meso, w.id) : ''}
       ${!w.routineId ? `<button class="btn primary block" style="margin-top:14px" data-act="save-routine" data-id="${w.id}">Guardar como rotina</button>` : ''}
       <button class="btn block" style="margin-top:8px" data-close>Fechar</button>
     </div>`);
@@ -1279,6 +1369,23 @@ const actions = {
   },
   'remove-set': (d) => { S().active.exercises[+d.ei].sets.pop(); save(); renderWorkout(); },
   'save-routine': (d) => saveRoutine(d.id),
+  'meso-start': () => { S().meso = newMeso(null); save(); haptic(); render(); toast('Bloco 1 começou 🚀'); mesoSheet(); },
+  meso: () => mesoSheet(),
+  'meso-deload': () => { S().meso.deloadFrom = Date.now(); save(); render(); toast('Deload ativado: 7 dias'); },
+  'meso-off': () => { if (confirm('Desligar o mesociclo? Os ajustes de séries são apagados.')) { S().meso = null; save(); render(); } },
+  'meso-rec': (d) => {
+    const a = S().active, e = lastEntry(S().meso, d.r, a.start);
+    if (!e) return;
+    e.rec = +d.v; e.recWid = a.id;
+    save(); haptic(); renderWorkout();
+  },
+  'meso-pump': (d, el) => {
+    const e = S().meso?.log.find((x) => x.wid === d.wid && x.r === d.r);
+    if (!e) return;
+    e.pump = +d.v;
+    save(); haptic();
+    el.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === el));
+  },
   'restore-split': () => { seedSplit(true); render(); toast('Split reposto ✓'); },
   export: () => exportData(),
   wipe: () => { if (confirm('Apagar TODOS os treinos, rotinas e definições? Isto não se desfaz.')) { resetAll(); location.reload(); } },
@@ -1291,7 +1398,7 @@ document.addEventListener('click', (e) => {
   if (!el) return;
   const fn = actions[el.dataset.act];
   if (!fn) return;
-  fn(el.dataset);
+  fn(el.dataset, el);
 });
 
 document.addEventListener('submit', (e) => {
@@ -1317,6 +1424,7 @@ setInterval(() => {
   app.innerHTML = '<div class="empty" style="padding-top:40vh">A carregar…</div>';
   try { await loadExercises(); } catch { toast('Erro a carregar exercícios'); }
   seedSplit();
+  if (S().meso) { const n = S().meso.n; S().meso = rollover(S().meso); if (S().meso.n !== n) { save(); setTimeout(() => toast(`Bloco ${S().meso.n} começou: volume de partida mais alto 🚀`), 800); } }
   pruneMealPhotos();
   render();
   if (S().active) openWorkout();

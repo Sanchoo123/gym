@@ -15,7 +15,7 @@ export function history(workouts, exId) {
     for (const ex of w.exercises) {
       if (ex.exId !== exId) continue;
       const sets = doneSets(ex);
-      if (sets.length) out.push({ date: w.start, sets });
+      if (sets.length) out.push({ date: w.start, sets, deload: !!w.deload });
     }
   }
   return out;
@@ -27,7 +27,8 @@ const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 
 // Sugestão para a próxima sessão (dupla progressão + RPE + deteção de estagnação)
 export function suggest(workouts, exId, baseInc = 2.5) {
-  const h = history(workouts, exId);
+  // As sessões de deload não contam para a progressão nem para a estagnação
+  const h = history(workouts, exId).filter((s) => !s.deload);
   if (!h.length) return null;
   const ex = getEx(exId);
   const inc = incrementFor(ex, baseInc);

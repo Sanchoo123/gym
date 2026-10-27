@@ -552,3 +552,31 @@ ol.steps li { margin: 6px 0; }
 .pgoal { position: absolute; left: 0; right: 0; height: 2px; background: rgba(255,255,255,0.5); }
 @keyframes grow-y { from { transform: scaleY(0); } }
 .meal-big { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 16px; margin-bottom: 12px; }
+
+/* Mesociclo */
+.meso-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-top: 12px; }
+.meso-card .hero-eyebrow { display: block; margin-bottom: 4px; }
+.meso-weeks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin: 10px 0 8px; }
+.meso-weeks i { height: 6px; border-radius: 3px; background: var(--surface-3); }
+.meso-weeks i.past { background: var(--accent-2); }
+.meso-weeks i.on { background: var(--accent); box-shadow: 0 0 12px rgba(198,255,61,0.45); }
+.meso-weeks i.dl { background: rgba(255,181,71,0.25); }
+.meso-weeks i.dl.on { background: var(--warn); box-shadow: 0 0 12px rgba(255,181,71,0.45); }
+.meso-banner { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 14px; margin-bottom: 12px; border-radius: 14px; font-size: 13.5px; background: var(--accent-soft); border: 1px solid rgba(198,255,61,0.2); }
+.meso-banner .badge { flex: none; font-size: 10.5px; font-weight: 800; color: var(--accent-ink); background: var(--accent); padding: 3px 7px; border-radius: 6px; letter-spacing: 0.04em; }
+.meso-banner.dl { background: rgba(255,181,71,0.1); border-color: rgba(255,181,71,0.25); }
+.meso-banner.dl .badge { background: var(--warn); }
+.checkin { margin-bottom: 12px; }
+.checkin.done .chip:not(.on) { display: none; }
+.fb-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.fb-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.fb-row > span { font-weight: 700; font-size: 14px; }
+.fb-row .chip { padding: 7px 11px; font-size: 13px; }
+.meso-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 800; color: var(--accent); background: var(--accent-soft); }
+.meso-tag.dn { color: var(--warn); background: rgba(255,181,71,0.12); }
+.meso-tag.dl { color: var(--warn); background: rgba(255,181,71,0.12); }
+.delta { flex: none; padding: 4px 9px; border-radius: 8px; font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.06); color: var(--muted); }
+.delta.up { color: var(--accent-ink); background: var(--accent); }
+.delta.dn { color: var(--accent-ink); background: var(--warn); }
+.fb-row .chips.wrap { display: grid; grid-template-columns: repeat(var(--n, 4), 1fr); gap: 6px; }
+.fb-row .chip { min-width: 0; padding: 8px 2px; font-size: 12px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; justify-content: center; }

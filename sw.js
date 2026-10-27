@@ -1,11 +1,11 @@
 // Service worker: app funciona offline no ginásio.
 // Sobe a versão sempre que alterares ficheiros da app, para o iPhone buscar a nova.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = 'runtime-v1';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'js/app.js', 'js/store.js', 'js/data.js', 'js/coach.js', 'js/ui.js', 'js/body.js', 'js/nutrition.js',
+  'js/app.js', 'js/store.js', 'js/data.js', 'js/coach.js', 'js/ui.js', 'js/body.js', 'js/nutrition.js', 'js/meso.js',
   'data/exercises.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];

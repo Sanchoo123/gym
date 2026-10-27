@@ -10,6 +10,7 @@ const empty = () => ({
   measures: [],  // { t, shoulders, waist, chest, arm, thigh } em cm
   meals: [],     // { id, t, name, kcal, protein, carbs, fat, items?, photo? }
   profile: {},   // { sex, age, height, activity, goal }
+  meso: null,    // mesociclo: { n, start, deloadFrom, extra, peak, log }
   seeded: false,
   settings: { rest: 120, increment: 2.5, apiKey: '' },
 });
