@@ -6,6 +6,10 @@ const empty = () => ({
   active: null,
   routines: [],
   chat: [],
+  weights: [],   // { t, kg }
+  measures: [],  // { t, shoulders, waist, chest, arm, thigh } em cm
+  profile: {},   // { sex, age, height, activity, goal }
+  seeded: false,
   settings: { rest: 120, increment: 2.5, apiKey: '' },
 });
 

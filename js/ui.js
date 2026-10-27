@@ -18,6 +18,11 @@ export const icon = {
   send: svg('<path d="M12 19V5M5 12l7-7 7 7"/>', 'stroke-width="2.5"'),
   dots: svg('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>', 'stroke-width="3"'),
   trash: svg('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>'),
+  body: svg('<circle cx="12" cy="4" r="2"/><path d="M8 22l1.5-8M16 22l-1.5-8M6 9c2 1 4 1.5 6 1.5S16 10 18 9M9.5 14h5l.5-4.5"/>'),
+  user: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>'),
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  swap: svg('<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>'),
 };
 
 // ---------- Haptics ----------
@@ -148,7 +153,7 @@ export function lineChart(points, { w = 340, h = 180, unit = 'kg' } = {}) {
   const dateLbl = (t) => new Date(t).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" style="--len:${len}">
     <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c6ff3d" stop-opacity=".35"/><stop offset="1" stop-color="#c6ff3d" stop-opacity="0"/></linearGradient></defs>
-    ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${w - pad.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="0" y="${Y(t) + 4}">${Math.round(t)}</text>`).join('')}
+    ${ticks.map((t) => `<line class="grid" x1="${pad.l}" x2="${w - pad.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="0" y="${Y(t) + 4}">${hi - lo < 6 ? t.toFixed(1).replace('.', ',') : Math.round(t)}</text>`).join('')}
     <path class="area" d="${area}" fill="url(#ga)"/>
     <path class="line" d="${d}"/>
     ${pts.map((p, i) => `<circle class="dot" cx="${p[0]}" cy="${p[1]}" r="3.5" style="animation-delay:${0.3 + (i / pts.length) * 0.8}s"/>`).join('')}

@@ -42,8 +42,8 @@ export const PT_NAMES = {
   'Smith_Machine_Squat': 'Agachamento Smith',
   'Hack_Squat': 'Hack squat',
   'Leg_Press': 'Leg press',
-  'Leg_Extensions': 'Extensão de pernas',
-  'Lying_Leg_Curls': 'Curl femoral deitado',
+  'Leg_Extensions': 'Leg extension (máquina)',
+  'Lying_Leg_Curls': 'Leg curl (máquina)',
   'Seated_Leg_Curl': 'Curl femoral sentado',
   'Dumbbell_Lunges': 'Afundos (halteres)',
   'Barbell_Lunge': 'Afundos (barra)',
@@ -55,7 +55,21 @@ export const PT_NAMES = {
   'Seated_Calf_Raise': 'Gémeos sentado',
   'Pullups': 'Elevações',
   'Chin-Up': 'Elevações supinadas',
-  'Wide-Grip_Lat_Pulldown': 'Puxada à frente',
+  'Wide-Grip_Lat_Pulldown': 'Lat pulldown',
+  'Leverage_High_Row': 'Remada alta (máquina)',
+  'One_Arm_Dumbbell_Preacher_Curl': 'Preacher curl unilateral (halter)',
+  'Calf_Press_On_The_Leg_Press_Machine': 'Gémeos na leg press',
+  'Leverage_Shoulder_Press': 'Shoulder press (máquina)',
+  'Front_Cable_Raise': 'Elevação frontal (polia)',
+  'Cable_Seated_Lateral_Raise': 'Elevação lateral (polia)',
+  'Reverse_Machine_Flyes': 'Posterior de ombro (peck deck)',
+  'Decline_Crunch': 'Abdominal banco declinado',
+  'Cable_Rear_Delt_Fly': 'Posterior de ombro (polia)',
+  'Incline_Cable_Flye': 'Aberturas inclinadas (polia)',
+  'Straight-Arm_Pulldown': 'Pullover na polia',
+  'Cable_Rope_Overhead_Triceps_Extension': 'Tríceps francês (corda)',
+  'Hyperextensions_Back_Extensions': 'Hiperextensões',
+  'Thigh_Adductor': 'Adutora (máquina)',
   'Seated_Cable_Rows': 'Remada sentada (cabo)',
   'Bent_Over_Barbell_Row': 'Remada curvada (barra)',
   'One-Arm_Dumbbell_Row': 'Remada unilateral (halter)',
@@ -74,10 +88,10 @@ export const PT_NAMES = {
   'Dumbbell_Bicep_Curl': 'Curl com halteres',
   'Hammer_Curls': 'Curl martelo',
   'Triceps_Pushdown': 'Extensão tríceps (cabo)',
-  'Triceps_Pushdown_-_Rope_Attachment': 'Extensão tríceps (corda)',
+  'Triceps_Pushdown_-_Rope_Attachment': 'Tríceps na polia (corda)',
   'Lying_Triceps_Press': 'Skull crusher',
   'Dips_-_Triceps_Version': 'Fundos (tríceps)',
-  'Cable_Crunch': 'Crunch no cabo',
+  'Cable_Crunch': 'Crunch na polia',
   'Hanging_Leg_Raise': 'Elevação de pernas suspenso',
   'Plank': 'Prancha',
 };
@@ -114,3 +128,19 @@ export function incrementFor(ex, base = 2.5) {
   if (ex.equipment === 'barbell' && (ex.primary.includes('quadriceps') || ex.primary.includes('hamstrings') || ex.primary.includes('glutes') || ex.primary.includes('lower back'))) return base * 2;
   return base;
 }
+
+// O teu split (carregado na primeira vez que abres a app)
+export const MY_SPLIT = [
+  { name: 'Superiores', exercises: [
+    ['Wide-Grip_Lat_Pulldown', 3], ['Leverage_High_Row', 3], ['Butterfly', 3],
+    ['Barbell_Incline_Bench_Press_-_Medium_Grip', 3], ['One_Arm_Dumbbell_Preacher_Curl', 3], ['Triceps_Pushdown_-_Rope_Attachment', 3],
+  ] },
+  { name: 'Pernas', exercises: [
+    ['Smith_Machine_Squat', 3], ['Lying_Leg_Curls', 3], ['Leg_Extensions', 3],
+    ['Calf_Press_On_The_Leg_Press_Machine', 3], ['Barbell_Hip_Thrust', 3],
+  ] },
+  { name: 'Ombros + Abs', exercises: [
+    ['Leverage_Shoulder_Press', 3], ['Front_Cable_Raise', 3], ['Cable_Seated_Lateral_Raise', 3],
+    ['Reverse_Machine_Flyes', 3], ['Cable_Crunch', 2], ['Decline_Crunch', 2],
+  ] },
+];

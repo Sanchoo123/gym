@@ -173,9 +173,10 @@ const SYSTEM = `És o coach de ginásio pessoal do utilizador, dentro da app de 
 Responde em português de Portugal, de forma direta e prática, como um treinador experiente.
 Baseia-te no histórico real abaixo (formato: peso_kg x reps @RPE). Cita números concretos quando ajudar.
 Quando sugerires cargas, dá peso e reps exatos para a próxima sessão. Sê breve: frases curtas, listas curtas.
+O objetivo principal do utilizador é ganhar massa muscular com foco em estética (V-taper, ombros largos, peito superior, braços).
 Não dês conselhos médicos; se houver dor ou lesão, recomenda falar com um profissional.`;
 
-export async function askClaude({ apiKey, workouts, chat, onText }) {
+export async function askClaude({ apiKey, workouts, chat, context = '', onText }) {
   const Anthropic = await loadSdk();
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   const stream = client.beta.messages.stream({
@@ -187,7 +188,7 @@ export async function askClaude({ apiKey, workouts, chat, onText }) {
     fallbacks: 'default',
     system: [
       { type: 'text', text: SYSTEM },
-      { type: 'text', text: `Data de hoje: ${new Date().toISOString().slice(0, 10)}\nHistórico de treinos:\n${historyDigest(workouts)}`, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: `Data de hoje: ${new Date().toISOString().slice(0, 10)}\n${context}\nHistórico de treinos:\n${historyDigest(workouts)}`, cache_control: { type: 'ephemeral' } },
     ],
     messages: chat.map((m) => ({ role: m.role, content: m.content })),
   });
