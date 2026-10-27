@@ -66,3 +66,49 @@ export function adonis(m) {
   if (!m?.shoulders || !m?.waist) return null;
   return m.shoulders / m.waist;
 }
+
+// ---- Registo de refeições ----
+export const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+
+export function dayTotals(meals, t = Date.now()) {
+  const k = dayKey(t);
+  const list = meals.filter((m) => dayKey(m.t) === k);
+  const sum = (f) => list.reduce((a, m) => a + (+m[f] || 0), 0);
+  return { list, kcal: sum('kcal'), protein: sum('protein'), carbs: sum('carbs'), fat: sum('fat') };
+}
+
+// Metas diárias: do plano completo, ou só proteína se houver peso mas não perfil
+export function targets(p, weight) {
+  if (p) return { kcal: p.kcal, protein: p.protein, carbs: p.carbs, fat: p.fat };
+  if (weight) return { kcal: null, protein: Math.round(weight * 2), carbs: null, fat: null };
+  return { kcal: null, protein: 150, carbs: null, fat: null };
+}
+
+export const PRESETS = [
+  { name: 'Batido de whey (1 scoop)', kcal: 120, protein: 24, carbs: 3, fat: 2 },
+  { name: '3 ovos mexidos', kcal: 215, protein: 19, carbs: 1, fat: 15 },
+  { name: 'Peito de frango 150 g', kcal: 250, protein: 46, carbs: 0, fat: 6 },
+  { name: 'Skyr / iogurte proteico', kcal: 95, protein: 16, carbs: 6, fat: 0 },
+  { name: 'Lata de atum (escorrido)', kcal: 95, protein: 21, carbs: 0, fat: 1 },
+  { name: 'Arroz cozido 200 g', kcal: 260, protein: 5, carbs: 56, fat: 1 },
+  { name: 'Aveia 60 g + leite', kcal: 350, protein: 17, carbs: 50, fat: 9 },
+  { name: 'Banana', kcal: 105, protein: 1, carbs: 27, fat: 0 },
+];
+
+// Reduz a foto no iPhone antes de enviar (mais rápido e barato)
+export async function shrinkImage(file, max = 1280, quality = 0.82) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const draw = (m, q) => {
+      const k = Math.min(1, m / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', q);
+    };
+    return { full: draw(max, quality), thumb: draw(220, 0.7) };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

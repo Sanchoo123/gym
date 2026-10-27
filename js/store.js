@@ -8,6 +8,7 @@ const empty = () => ({
   chat: [],
   weights: [],   // { t, kg }
   measures: [],  // { t, shoulders, waist, chest, arm, thigh } em cm
+  meals: [],     // { id, t, name, kcal, protein, carbs, fat, items?, photo? }
   profile: {},   // { sex, age, height, activity, goal }
   seeded: false,
   settings: { rest: 120, increment: 2.5, apiKey: '' },
@@ -31,6 +32,7 @@ export function save() {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch (e) {
     console.warn('Falha a guardar', e);
+    window.dispatchEvent(new Event('store-full'));
   }
 }
 

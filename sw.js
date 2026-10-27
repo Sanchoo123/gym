@@ -1,6 +1,6 @@
 // Service worker: app funciona offline no ginásio.
 // Sobe a versão sempre que alterares ficheiros da app, para o iPhone buscar a nova.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = 'runtime-v1';
 const FILES = [

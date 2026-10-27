@@ -1,8 +1,8 @@
 import { store, save, uid, replaceAll, resetAll } from './store.js';
 import { loadExercises, getEx, img, muscleName, MUSCLES, EQUIPMENT, MY_SPLIT } from './data.js';
-import { suggest, history, bests, e1rm, volume, setCount, progressSeries, insights, askClaude, claudeErrorMessage } from './coach.js';
+import { suggest, history, bests, e1rm, volume, setCount, progressSeries, insights, askClaude, estimateMeal, claudeErrorMessage } from './coach.js';
 import { REGIONS, RECOMMEND, regionsFor, regionSets, regionStrength, volumeState, strengthState, aestheticScore, bodySvg, miniBody } from './body.js';
-import { plan, weightTrend, weightAdvice, adonis, ACTIVITY, GOALS } from './nutrition.js';
+import { plan, weightTrend, weightAdvice, adonis, ACTIVITY, GOALS, dayTotals, targets, PRESETS, shrinkImage } from './nutrition.js';
 import { esc, fmt, icon, sheet, toast, confetti, haptic, unlockAudio, beep, lineChart, countUp } from './ui.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -15,6 +15,8 @@ let bodyMode = 'volume';
 let workoutEl = null;
 let wakeLock = null;
 let chatBusy = false;
+let nutOffset = 0;
+let nutPage = null;
 
 // ============ Utilitários ============
 const DAY = 864e5;
@@ -139,6 +141,7 @@ function renderHome() {
     </div>
     <div class="week-strip">${days.map((d, i) => `<div class="day ${trained.has(i) ? 'on' : ''} ${i === today ? 'today' : ''}"><span>${d}</span><i></i></div>`).join('')}</div>
     ${hero}
+    ${nutritionCard()}
     <div class="stats">
       <div class="stat"><b class="num" data-count="${week.length}">0</b><span>treinos na semana</span></div>
       <div class="stat"><b class="num">${vol >= 1000 ? `<i data-count="${Math.round(vol / 100) / 10}" data-dec="1">0</i>t` : `<i data-count="${Math.round(vol)}">0</i>`}</b><span>${vol >= 1000 ? 'volume semanal' : 'kg de volume'}</span></div>
@@ -375,6 +378,232 @@ function logMeasures() {
   });
 }
 
+
+// ============ Nutrição ============
+const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const nutDay = () => Date.now() - nutOffset * DAY;
+const mealTime = () => (nutOffset === 0 ? Date.now() : dayStart(nutDay()) + 13 * 3600e3);
+const r0 = (n) => Math.round(+n || 0);
+
+function nutTargets() {
+  const { profile, weights } = S();
+  const kg = weights.at(-1)?.kg;
+  return targets(plan(profile, kg), kg);
+}
+
+function nutritionCard() {
+  const tg = nutTargets();
+  const d = dayTotals(S().meals);
+  const left = Math.max(0, tg.protein - d.protein);
+  return `<div class="card nut-card">
+    <button class="nut-main" data-act="nutrition">
+      ${ring(d.protein / tg.protein, { size: 74, stroke: 8, label: r0(d.protein), sub: `/${tg.protein} g` })}
+      ${tg.kcal ? ring(d.kcal / tg.kcal, { size: 74, stroke: 8, color: 'var(--sky)', label: r0(d.kcal), sub: 'kcal' }) : ''}
+      <span class="grow nut-text"><span class="hero-eyebrow">NUTRIÇÃO HOJE</span><b>${left ? `Faltam ${r0(left)} g de proteína` : 'Proteína batida 💪'}</b><span class="muted small">${d.list.length} refeiç${d.list.length === 1 ? 'ão' : 'ões'}${tg.kcal ? ` · ${r0(d.kcal)}/${tg.kcal} kcal` : ''}</span></span>
+    </button>
+    <div class="row" style="margin-top:12px;gap:8px"><button class="btn primary grow" data-act="meal-photo">${icon.camera} Fotografar refeição</button><button class="btn" data-act="meal-manual" aria-label="Adicionar manualmente">${icon.plus}</button></div>
+  </div>`;
+}
+
+function refreshNutrition() {
+  render();
+  if (nutPage?.el.isConnected) paintNutrition();
+}
+
+function openNutrition() {
+  nutOffset = 0;
+  nutPage = page(`<header class="page-head"><button class="icon-btn" data-back aria-label="Fechar">${icon.close}</button><h3 class="grow">Nutrição</h3><button class="btn ghost sm" data-act="profile">Metas</button></header><div class="page-body" data-nut></div>`);
+  nutPage.el.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-day],[data-meal]');
+    if (!t) return;
+    if (t.dataset.day) { nutOffset = Math.max(0, nutOffset + +t.dataset.day); haptic(); paintNutrition(); }
+    if (t.dataset.meal) editMeal(t.dataset.meal);
+  });
+  paintNutrition();
+}
+
+function paintNutrition() {
+  const tg = nutTargets();
+  const d = dayTotals(S().meals, nutDay());
+  const label = nutOffset === 0 ? 'Hoje' : nutOffset === 1 ? 'Ontem' : new Date(nutDay()).toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'short' });
+  const week = [6, 5, 4, 3, 2, 1, 0].map((i) => ({ t: Date.now() - i * DAY, p: dayTotals(S().meals, Date.now() - i * DAY).protein }));
+  const maxP = Math.max(tg.protein * 1.2, ...week.map((w) => w.p));
+  const macro = (n, v, goal, c) => `<div class="macro"><div class="row between"><span>${n}</span><b class="num">${r0(v)}${goal ? `<span class="muted"> / ${goal}</span>` : ''} g</b></div><div class="track"><i style="width:${goal ? Math.min(100, (v / goal) * 100) : 0}%;background:${c}"></i></div></div>`;
+  $('[data-nut]', nutPage.el).innerHTML = `
+    <div class="day-nav"><button class="icon-btn sm" data-day="1">‹</button><b style="text-transform:capitalize">${esc(label)}</b><button class="icon-btn sm" data-day="-1" ${nutOffset === 0 ? 'disabled' : ''}>›</button></div>
+    <div class="nut-rings">
+      ${ring(d.protein / tg.protein, { size: 128, stroke: 12, label: `<i class="num">${r0(d.protein)}</i>`, sub: `de ${tg.protein} g proteína` })}
+      ${tg.kcal ? ring(d.kcal / tg.kcal, { size: 128, stroke: 12, color: 'var(--sky)', label: `<i class="num">${r0(d.kcal)}</i>`, sub: `de ${tg.kcal} kcal` }) : ''}
+    </div>
+    ${!tg.kcal ? `<div class="advice"><span>Preenche o perfil (botão <b>Metas</b>) para teres também a meta de calorias, hidratos e gordura.</span></div>` : ''}
+    <div class="card" style="margin-top:12px">${macro('Proteína', d.protein, tg.protein, 'var(--accent)')}${macro('Hidratos', d.carbs, tg.carbs, '#7dd3fc')}${macro('Gordura', d.fat, tg.fat, 'var(--warn)')}</div>
+    <div class="row" style="margin-top:12px;gap:8px"><button class="btn primary grow" data-act="meal-photo">${icon.camera} Fotografar</button><button class="btn" data-act="meal-manual">${icon.plus} Manual</button></div>
+    <h2>Refeições</h2>
+    ${d.list.length ? `<div class="card" style="padding:4px 14px">${[...d.list].sort((a, b) => a.t - b.t).map((m) => `
+      <button class="meal-row" data-meal="${m.id}">
+        ${m.photo ? `<img class="meal-thumb" src="${m.photo}" alt="">` : '<span class="meal-thumb emoji">🍽️</span>'}
+        <span class="grow"><b class="ellipsis" style="display:block">${esc(m.name)}</b><span class="muted small">${new Date(m.t).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })} · ${r0(m.kcal)} kcal</span></span>
+        <b class="num" style="color:var(--accent)">${r0(m.protein)} g</b>
+      </button>`).join('')}</div>` : `<div class="empty"><div class="big">📸</div>Tira uma foto ao prato e a AI calcula a proteína e as calorias.</div>`}
+    <h2>Proteína · 7 dias</h2>
+    <div class="card"><div class="pbars">${week.map((w, i) => `<div class="pbar"><div class="pcol"><i class="${w.p >= tg.protein ? 'hit' : ''}" style="height:${(w.p / maxP) * 100}%;animation-delay:${i * 0.05}s"></i><span class="pgoal" style="bottom:${(tg.protein / maxP) * 100}%"></span></div><span class="muted small">${new Date(w.t).toLocaleDateString('pt-PT', { weekday: 'narrow' })}</span></div>`).join('')}</div>
+      <p class="muted small" style="margin:10px 0 0">A linha é a tua meta de ${tg.protein} g. Dias a verde: meta cumprida.</p></div>`;
+}
+
+function pickMealPhoto() {
+  if (!S().settings.apiKey) { toast('Adiciona a chave da API primeiro'); return openSettings(); }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.className = 'haptic';
+  document.body.append(input);
+  input.addEventListener('change', () => { const f = input.files[0]; input.remove(); if (f) analyzeMeal(f); });
+  input.click();
+}
+
+async function analyzeMeal(file) {
+  let shot;
+  try { shot = await shrinkImage(file); } catch { return toast('Não consegui abrir a imagem'); }
+  const sh = sheet(`
+    <div class="head"><h3>Analisar refeição</h3><button class="icon-btn" data-close>${icon.close}</button></div>
+    <div class="body">
+      <div class="meal-photo"><img src="${shot.full}" alt=""><div class="scan"></div></div>
+      <div data-stage>
+        <label class="lbl">Detalhes (opcional)</label>
+        <input class="field" data-note placeholder="ex.: 200 g de arroz, frango grelhado, fio de azeite">
+        <button class="btn primary block" style="margin-top:12px" data-go>${icon.coach} Analisar com AI</button>
+      </div>
+    </div>`);
+  const stage = $('[data-stage]', sh.el);
+  const run = async () => {
+    const note = $('[data-note]', sh.el)?.value || '';
+    $('.meal-photo', sh.el).classList.add('scanning');
+    stage.innerHTML = `<div class="analyzing"><span class="typing"><span></span><span></span><span></span></span> A identificar alimentos e porções…</div>`;
+    try {
+      const tg = nutTargets();
+      const remaining = Math.max(0, tg.protein - dayTotals(S().meals, nutDay()).protein);
+      const res = await estimateMeal({ apiKey: S().settings.apiKey, image: shot.full.split(',')[1], note, remaining });
+      $('.meal-photo', sh.el).classList.remove('scanning');
+      showMealResult(sh, stage, res, shot.thumb);
+    } catch (err) {
+      $('.meal-photo', sh.el).classList.remove('scanning');
+      stage.innerHTML = `<div class="advice warn"><b>Não foi possível analisar</b><span>${esc(await claudeErrorMessage(err))}</span></div>
+        <div class="row" style="margin-top:12px;gap:8px"><button class="btn primary grow" data-retry>Tentar outra vez</button><button class="btn" data-manual>Manual</button></div>`;
+      $('[data-retry]', stage).onclick = run;
+      $('[data-manual]', stage).onclick = () => { sh.close(); addMealManual(); };
+    }
+  };
+  $('[data-go]', stage).onclick = run;
+}
+
+function showMealResult(sh, stage, res, thumbUrl) {
+  if (!res.items.length) {
+    stage.innerHTML = `<div class="advice warn"><b>Não encontrei comida na foto</b><span>Tenta outra foto com o prato inteiro visível.</span></div>`;
+    return;
+  }
+  let mult = 1;
+  const base = { kcal: res.kcal, protein: res.protein, carbs: res.carbs, fat: res.fat };
+  stage.innerHTML = `
+    <div style="margin-top:14px"><span class="conf ${res.confidence === 'alta' ? 'hi' : res.confidence === 'baixa' ? 'lo' : ''}">confiança ${esc(res.confidence)}</span></div><input class="field meal-name" style="margin-top:8px" data-f="name" value="${esc(res.name)}">
+    <div class="items">${res.items.map((i) => `<div class="item"><span class="grow">${esc(i.name)} <span class="muted">· ${r0(i.grams)} g</span></span><span class="muted small num">${r0(i.kcal)} kcal</span><b class="num">${r0(i.protein)} g P</b></div>`).join('')}</div>
+    <label class="lbl">Porção que comeste</label>
+    <div class="chips wrap">${[0.5, 1, 1.5, 2].map((m) => `<button class="chip ${m === 1 ? 'on' : ''}" data-mult="${m}">${m === 0.5 ? '½' : m === 1.5 ? '1½' : m}×</button>`).join('')}</div>
+    <div class="macro-edit">${[['protein', 'Proteína', 'g'], ['kcal', 'Calorias', 'kcal'], ['carbs', 'Hidratos', 'g'], ['fat', 'Gordura', 'g']].map(([k, l, u]) => `<label><span>${l}</span><input class="num" inputmode="numeric" data-f="${k}" value="${base[k]}"><small>${u}</small></label>`).join('')}</div>
+    ${res.tip ? `<div class="advice good"><span>💡 ${esc(res.tip)}</span></div>` : ''}
+    <button class="btn primary block" style="margin-top:14px" data-save>Guardar refeição</button>`;
+  stage.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-mult]');
+    if (m) {
+      mult = +m.dataset.mult;
+      stage.querySelectorAll('[data-mult]').forEach((c) => c.classList.toggle('on', c === m));
+      Object.keys(base).forEach((k) => { $(`[data-f=${k}]`, stage).value = r0(base[k] * mult); });
+      haptic();
+    }
+    if (e.target.closest('[data-save]')) {
+      const v = (k) => num($(`[data-f=${k}]`, stage).value) || 0;
+      addMeal({ name: $('[data-f=name]', stage).value.trim() || res.name, kcal: v('kcal'), protein: v('protein'), carbs: v('carbs'), fat: v('fat'), items: res.items, photo: thumbUrl });
+      sh.close();
+    }
+  });
+}
+
+function addMeal(m) {
+  const tg = nutTargets();
+  const before = dayTotals(S().meals, nutDay()).protein;
+  S().meals.push({ id: uid(), t: mealTime(), ...m });
+  save();
+  haptic(20);
+  const after = before + m.protein;
+  if (before < tg.protein && after >= tg.protein) { confetti(); toast('💪 Meta de proteína batida!', 'gold'); }
+  else toast(`+${r0(m.protein)} g proteína · faltam ${r0(Math.max(0, tg.protein - after))} g`);
+  refreshNutrition();
+}
+
+function addMealManual() {
+  const recent = [];
+  for (const m of [...S().meals].reverse()) {
+    if (!recent.some((x) => x.name === m.name)) recent.push(m);
+    if (recent.length >= 6) break;
+  }
+  const chip = (m, src, i) => `<button class="food" data-src="${src}" data-i="${i}"><b class="ellipsis">${esc(m.name)}</b><span class="muted small">${r0(m.protein)} g P · ${r0(m.kcal)} kcal</span></button>`;
+  const sh = sheet(`
+    <div class="head"><h3>Adicionar refeição</h3><button class="icon-btn" data-close>${icon.close}</button></div>
+    <div class="body">
+      ${recent.length ? `<label class="lbl">Recentes</label><div class="foods">${recent.map((m, i) => chip(m, 'r', i)).join('')}</div>` : ''}
+      <label class="lbl">Rápidos</label><div class="foods">${PRESETS.map((m, i) => chip(m, 'p', i)).join('')}</div>
+      <label class="lbl">Personalizado</label>
+      <input class="field" data-f="name" placeholder="Nome (ex.: Bitoque)">
+      <div class="macro-edit">${[['protein', 'Proteína', 'g'], ['kcal', 'Calorias', 'kcal'], ['carbs', 'Hidratos', 'g'], ['fat', 'Gordura', 'g']].map(([k, l, u]) => `<label><span>${l}</span><input class="num" inputmode="numeric" data-f="${k}" placeholder="0"><small>${u}</small></label>`).join('')}</div>
+      <button class="btn primary block" style="margin-top:14px" data-save>Guardar</button>
+    </div>`);
+  sh.el.addEventListener('click', (e) => {
+    const f = e.target.closest('.food');
+    if (f) {
+      const m = (f.dataset.src === 'r' ? recent : PRESETS)[+f.dataset.i];
+      addMeal({ name: m.name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat, photo: m.photo });
+      sh.close();
+      return;
+    }
+    if (e.target.closest('[data-save]')) {
+      const v = (k) => num($(`[data-f=${k}]`, sh.el).value) || 0;
+      const name = $('[data-f=name]', sh.el).value.trim();
+      if (!name || (!v('kcal') && !v('protein'))) return toast('Indica o nome e pelo menos calorias ou proteína');
+      addMeal({ name, kcal: v('kcal'), protein: v('protein'), carbs: v('carbs'), fat: v('fat') });
+      sh.close();
+    }
+  });
+}
+
+function editMeal(id) {
+  const m = S().meals.find((x) => x.id === id);
+  if (!m) return;
+  const sh = sheet(`
+    <div class="head"><h3>Editar refeição</h3><button class="btn primary sm" data-save>Guardar</button></div>
+    <div class="body">
+      ${m.photo ? `<img class="meal-big" src="${m.photo}" alt="">` : ''}
+      <input class="field" data-f="name" value="${esc(m.name)}">
+      ${m.items?.length ? `<div class="items">${m.items.map((i) => `<div class="item"><span class="grow">${esc(i.name)} <span class="muted">· ${r0(i.grams)} g</span></span><b class="num">${r0(i.protein)} g P</b></div>`).join('')}</div>` : ''}
+      <div class="macro-edit">${[['protein', 'Proteína', 'g'], ['kcal', 'Calorias', 'kcal'], ['carbs', 'Hidratos', 'g'], ['fat', 'Gordura', 'g']].map(([k, l, u]) => `<label><span>${l}</span><input class="num" inputmode="numeric" data-f="${k}" value="${r0(m[k])}"><small>${u}</small></label>`).join('')}</div>
+      <button class="btn danger block" style="margin-top:14px" data-del>Apagar refeição</button>
+    </div>`);
+  sh.el.addEventListener('click', (e) => {
+    if (e.target.closest('[data-del]')) { S().meals = S().meals.filter((x) => x.id !== id); save(); sh.close(); refreshNutrition(); return; }
+    if (e.target.closest('[data-save]')) {
+      const v = (k) => num($(`[data-f=${k}]`, sh.el).value) || 0;
+      Object.assign(m, { name: $('[data-f=name]', sh.el).value.trim() || m.name, kcal: v('kcal'), protein: v('protein'), carbs: v('carbs'), fat: v('fat') });
+      save(); sh.close(); refreshNutrition(); toast('Refeição atualizada ✓');
+    }
+  });
+}
+
+// Fotos só ficam guardadas 21 dias (o armazenamento do iPhone para apps web é limitado)
+function pruneMealPhotos() {
+  const limit = Date.now() - 21 * DAY;
+  let changed = false;
+  for (const m of S().meals) if (m.photo && m.t < limit) { delete m.photo; changed = true; }
+  if (changed) save();
+}
+
 // ============ Histórico ============
 function renderHistory() {
   const ws = [...S().workouts].reverse();
@@ -456,6 +685,11 @@ function aiContext() {
   if (p) lines.push(`Plano calculado: ${p.kcal} kcal, ${p.protein} g proteína, ${p.carbs} g hidratos, ${p.fat} g gordura.`);
   if (measures.length) { const m = measures.at(-1); lines.push(`Medidas (cm): ombros ${m.shoulders}, peito ${m.chest}, cintura ${m.waist}, braço ${m.arm}, coxa ${m.thigh}.`); }
   lines.push(`Séries por músculo nos últimos 7 dias: ${Object.entries(REGIONS).map(([r, c]) => `${c.name} ${Math.round((sets[r] || 0) * 10) / 10} (ideal ${c.min}-${c.max})`).join('; ')}.`);
+  const { meals } = S();
+  const tg = targets(p, weights.at(-1)?.kg);
+  const today = dayTotals(meals);
+  const avgP = Math.round([0, 1, 2, 3, 4, 5, 6].reduce((t, i) => t + dayTotals(meals, Date.now() - i * DAY).protein, 0) / 7);
+  if (meals.length) lines.push(`Nutrição hoje: ${Math.round(today.kcal)} kcal, ${Math.round(today.protein)} g proteína (meta ${tg.protein} g). Média de proteína nos últimos 7 dias: ${avgP} g/dia.`);
   if (routines.length) lines.push(`Split: ${routines.map((r) => `${r.name} = ${r.exercises.map((e) => `${getEx(e.exId).name} ${e.sets}x`).join(', ')}`).join(' | ')}.`);
   return lines.join('\n');
 }
@@ -1022,6 +1256,9 @@ const actions = {
   region: (d) => regionSheet(d.r),
   profile: () => openProfile(),
   'log-weight': () => logWeight(),
+  nutrition: () => openNutrition(),
+  'meal-photo': () => pickMealPhoto(),
+  'meal-manual': () => addMealManual(),
   'log-measures': () => logMeasures(),
   'ex-detail': (d) => exerciseDetail(d.id),
   settings: () => openSettings(),
@@ -1066,6 +1303,8 @@ document.addEventListener('submit', (e) => {
   sendChat(v);
 });
 
+window.addEventListener('store-full', () => toast('Armazenamento cheio: exporta um backup'));
+
 // Relógios: duração do treino e descanso
 setInterval(() => {
   const a = S().active;
@@ -1078,6 +1317,7 @@ setInterval(() => {
   app.innerHTML = '<div class="empty" style="padding-top:40vh">A carregar…</div>';
   try { await loadExercises(); } catch { toast('Erro a carregar exercícios'); }
   seedSplit();
+  pruneMealPhotos();
   render();
   if (S().active) openWorkout();
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

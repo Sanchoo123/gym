@@ -198,6 +198,71 @@ export async function askClaude({ apiKey, workouts, chat, context = '', onText }
   return msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
 }
 
+// ---- Estimativa de refeição por foto ----
+const MEAL_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name', 'items', 'confidence', 'tip'],
+  properties: {
+    name: { type: 'string', description: 'Nome curto da refeição em português (ex.: "Frango com arroz e salada")' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],
+        properties: {
+          name: { type: 'string' },
+          grams: { type: 'number' },
+          kcal: { type: 'number' },
+          protein: { type: 'number' },
+          carbs: { type: 'number' },
+          fat: { type: 'number' },
+        },
+      },
+    },
+    confidence: { type: 'string', enum: ['alta', 'média', 'baixa'] },
+    tip: { type: 'string', description: 'Uma frase curta e prática ligada ao objetivo de proteína do dia' },
+  },
+};
+
+const MEAL_PROMPT = `És um nutricionista desportivo. Analisa a foto da refeição e estima cada alimento visível:
+peso aproximado em gramas (já cozinhado, como está no prato), calorias e macros (proteína, hidratos, gordura em gramas).
+Usa referências visuais (prato ~26 cm, talheres, mão) para estimar porções. Inclui óleos/molhos prováveis.
+Se não for comida, devolve items vazio e confiança baixa. Responde em português de Portugal.`;
+
+export async function estimateMeal({ apiKey, image, mediaType = 'image/jpeg', note = '', remaining = null }) {
+  const Anthropic = await loadSdk();
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const extra = [
+    note && `Informação do utilizador: ${note}`,
+    remaining != null && `Ainda lhe faltam ${Math.round(remaining)} g de proteína hoje (objetivo: ganhar massa muscular).`,
+  ].filter(Boolean).join('\n');
+  const msg = await client.beta.messages.create({
+    model: 'claude-opus-5-5',
+    max_tokens: 16000,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: MEAL_SCHEMA } },
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    system: MEAL_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
+        { type: 'text', text: extra || 'Estima esta refeição.' },
+      ],
+    }],
+  });
+  if (msg.stop_reason === 'refusal') throw new Error('O modelo recusou analisar esta imagem.');
+  if (msg.stop_reason === 'max_tokens') throw new Error('Resposta incompleta. Tenta outra vez.');
+  const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error('Não consegui ler a resposta. Tenta outra vez.'); }
+  const sum = (k) => Math.round(data.items.reduce((t, i) => t + (+i[k] || 0), 0));
+  return { ...data, kcal: sum('kcal'), protein: sum('protein'), carbs: sum('carbs'), fat: sum('fat') };
+}
+
 export async function claudeErrorMessage(err) {
   const A = sdk;
   if (A && err instanceof A.AuthenticationError) return 'Chave da API inválida. Verifica-a nas Definições.';
